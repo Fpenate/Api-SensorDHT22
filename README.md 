@@ -1,0 +1,36 @@
+Descripción
+Una API en C# (.NET 10) que expone lecturas de temperatura y humedad del sensor DHT22.
+
+Características
+- Endpoints REST para lectura actual y historial
+- Configurable vía appsettings o variables de entorno
+- Preparado para Docker
+
+Requisitos
+- .NET 10 SDK
+
+Instalación
+1. Clona el repo:
+   git clone git@github.com:TU_USUARIO/TU_REPO.git
+   cd TU_REPO
+2. Restaurar y compilar:
+   dotnet restore
+   dotnet build
+
+   Configuración
+- Edita appsettings.Development.json o usa variables de entorno.
+- No almacenar secretos en el repo.
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+   "ConnectionStrings": {
+    
+     "Database": "Server=localhost;Database=SensorDHT22Db;User Id=sa;Password=passs;TrustServerCertificate=True;MultipleActiveResultSets=true"
+  }
+}
