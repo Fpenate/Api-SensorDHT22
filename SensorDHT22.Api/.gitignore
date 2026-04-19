@@ -1,0 +1,43 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+packages/
+.nuget/
+
+# ASP.NET Core / Secrets
+appsettings.*.json
+appsettings.json
+appsettings.Development.json
+secrets.json
+secrets.*
+UserSecrets/
+secrets/*.json
+
+# Logs and diagnostics
+*.log
+logs/
+*.vsix
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*~ 
+*.bak
+*.tmp
+
+# Certificates and keys
+*.pfx
+*.key
+*.pem
+
+# Optional: exclude publish output
+publish/
