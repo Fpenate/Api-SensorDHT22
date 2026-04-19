@@ -1,0 +1,17 @@
+@host = http://localhost:5165
+
+
+### 🔍 Get all temp
+GET {{host}}/api/sensorreadings
+Accept: application/json
+
+
+### 🔍 Crear temp (Usar POST, no GET)
+POST {{host}}/api/sensorreadings
+Content-Type: application/json
+
+{
+  "temperature": 500.5,
+  "humidity": 60.2,
+  "fechaHora": "2024-04-12T12:00:00"
+}

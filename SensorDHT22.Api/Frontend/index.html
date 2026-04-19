@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Sensor IoT</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0c1117;
+            --bg-secondary: #151c25;
+            --card-bg: #1a2332;
+            --card-border: #243044;
+            --text-color: #e8edf3;
+            --text-muted: #7a8ba3;
+            --border-color: #243044;
+            --online-color: #00e676;
+            --offline-color: #ff5252;
+            --temp-color: #ff6d00;
+            --temp-glow: rgba(255, 109, 0, 0.25);
+            --humid-color: #00bcd4;
+            --humid-glow: rgba(0, 188, 212, 0.25);
+            --accent: #00e676;
+            --accent-dim: rgba(0, 230, 118, 0.1);
+            --danger: #ff5252;
+            --danger-dim: rgba(255, 82, 82, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -40%;
+            left: -20%;
+            width: 80%;
+            height: 80%;
+            background: radial-gradient(ellipse, rgba(0, 188, 212, 0.04) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -30%;
+            right: -15%;
+            width: 70%;
+            height: 70%;
+            background: radial-gradient(ellipse, rgba(255, 109, 0, 0.03) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1060px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            margin-bottom: 20px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--temp-color), #ff8f00);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 16px var(--temp-glow);
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-color);
+            letter-spacing: -0.3px;
+        }
+
+        h1 span {
+            display: block;
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .status-signal {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-weight: 500;
+            font-size: 13px;
+            transition: all 0.4s ease;
+        }
+
+        .status-signal.online {
+            background: var(--accent-dim);
+            border: 1px solid rgba(0, 230, 118, 0.2);
+        }
+        .status-signal.offline {
+            background: var(--danger-dim);
+            border: 1px solid rgba(255, 82, 82, 0.2);
+        }
+        .status-signal.error {
+            background: var(--danger-dim);
+            border: 1px solid rgba(255, 82, 82, 0.2);
+        }
+
+        .signal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            transition: all 0.4s ease;
+        }
+
+        .signal-dot.online {
+            background-color: var(--online-color);
+            box-shadow: 0 0 8px var(--online-color);
+            animation: pulse-green 2s infinite;
+        }
+
+        .signal-dot.offline,
+        .signal-dot.error {
+            background-color: var(--offline-color);
+            box-shadow: 0 0 8px var(--offline-color);
+        }
+
+        .status-text.online { color: var(--online-color); }
+        .status-text.offline, .status-text.error { color: var(--offline-color); }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 4px var(--online-color); transform: scale(1); }
+            50% { box-shadow: 0 0 14px var(--online-color); transform: scale(1.15); }
+            100% { box-shadow: 0 0 4px var(--online-color); transform: scale(1); }
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+
+        .summary-card:hover {
+            border-color: #344963;
+        }
+
+        .summary-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 14px 14px 0 0;
+        }
+
+        .summary-card.temp::after {
+            background: linear-gradient(90deg, var(--temp-color), #ff8f00);
+        }
+        .summary-card.humid::after {
+            background: linear-gradient(90deg, var(--humid-color), #26c6da);
+        }
+        .summary-card.time::after {
+            background: linear-gradient(90deg, #7c4dff, #b388ff);
+        }
+
+        .summary-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+        }
+
+        .summary-label i {
+            width: 16px;
+            height: 16px;
+        }
+
+        .summary-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: -1px;
+        }
+
+        .summary-card.temp .summary-value {
+            color: var(--temp-color);
+            text-shadow: 0 0 30px var(--temp-glow);
+        }
+        .summary-card.humid .summary-value {
+            color: var(--humid-color);
+            text-shadow: 0 0 30px var(--humid-glow);
+        }
+        .summary-card.time .summary-value {
+            color: #b388ff;
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 0;
+        }
+
+        .summary-unit {
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 2px;
+        }
+
+        .chart-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .chart-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 20px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.temp {
+            background: var(--temp-color);
+            box-shadow: 0 0 6px var(--temp-glow);
+        }
+        .legend-dot.humid {
+            background: var(--humid-color);
+            box-shadow: 0 0 6px var(--humid-glow);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 280px;
+        }
+
+        .table-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .table-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .table-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 50px;
+            background: var(--accent-dim);
+            color: var(--accent);
+            border: 1px solid rgba(0, 230, 118, 0.15);
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            padding: 12px 24px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            transition: background 0.2s ease;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        tbody tr:first-child {
+            background: rgba(0, 230, 118, 0.03);
+        }
+
+        tbody td {
+            padding: 13px 24px;
+            font-size: 13px;
+            color: var(--text-color);
+        }
+
+        .td-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .td-temp {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--temp-color);
+        }
+
+        .td-humid {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--humid-color);
+        }
+
+        .latest-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: var(--accent-dim);
+            color: var(--accent);
+            margin-left: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            vertical-align: middle;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #2a1a1a;
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: var(--offline-color);
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        .toast.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, var(--card-border) 25%, #2e3d52 50%, var(--card-border) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 6px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-row td {
+            padding: 13px 24px;
+        }
+
+        .skeleton-text {
+            height: 14px;
+            width: 120px;
+        }
+
+        .skeleton-text.short {
+            width: 70px;
+        }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            opacity: 0;
+        }
+
+        .delay-1 { animation-delay: 0.05s; }
+        .delay-2 { animation-delay: 0.1s; }
+        .delay-3 { animation-delay: 0.15s; }
+        .delay-4 { animation-delay: 0.2s; }
+        .delay-5 { animation-delay: 0.3s; }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 14px 12px 32px;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 14px;
+                align-items: flex-start;
+                padding: 16px 18px;
+            }
+
+            h1 { font-size: 18px; }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .summary-value {
+                font-size: 28px;
+            }
+
+            .chart-wrapper {
+                height: 220px;
+            }
+
+            thead th, tbody td {
+                padding: 10px 14px;
+                font-size: 12px;
+            }
+
+            .td-time {
+                font-size: 11px;
+            }
+
+            .latest-badge {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .chart-legend {
+                gap: 12px;
+            }
+
+            .chart-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header class="animate-in delay-1">
+            <div class="header-left">
+                <div class="header-icon" aria-hidden="true">
+                    <i data-lucide="thermometer" style="width:24px;height:24px;color:#fff;"></i>
+                </div>
+                <h1>
+                    Sensor DHT22
+                    <span>Monitor en tiempo real</span>
+                </h1>
+            </div>
+            <div class="status-signal" id="statusContainer" role="status" aria-live="polite">
+                <div class="signal-dot offline" id="signalDot"></div>
+                <span class="status-text offline" id="statusText">Cargando...</span>
+            </div>
+        </header>
+
+        <div class="summary-grid">
+            <div class="summary-card temp animate-in delay-2">
+                <div class="summary-label">
+                    <i data-lucide="flame" style="color:var(--temp-color);"></i>
+                    Temperatura
+                </div>
+                <div class="summary-value" id="tempValue">--<span class="summary-unit">°C</span></div>
+            </div>
+            <div class="summary-card humid animate-in delay-3">
+                <div class="summary-label">
+                    <i data-lucide="droplets" style="color:var(--humid-color);"></i>
+                    Humedad
+                </div>
+                <div class="summary-value" id="humidValue">--<span class="summary-unit">%</span></div>
+            </div>
+            <div class="summary-card time animate-in delay-4">
+                <div class="summary-label">
+                    <i data-lucide="clock" style="color:#b388ff;"></i>
+                    Ultima lectura
+                </div>
+                <div class="summary-value" id="timeValue">--:--:--</div>
+            </div>
+        </div>
+
+        <section class="chart-section animate-in delay-4" aria-label="Gráfica de temperatura y humedad">
+            <div class="chart-header">
+                <h2 class="chart-title">Tendencia de lecturas</h2>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot temp"></div>
+                        Temperatura
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot humid"></div>
+                        Humedad
+                    </div>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </section>
+
+        <section class="table-section animate-in delay-5" aria-label="Tabla de lecturas recientes">
+            <div class="table-header">
+                <h2 class="table-title">Lecturas recientes</h2>
+                <span class="table-badge" id="tableBadge">0 registros</span>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Temperatura</th>
+                            <th>Humedad</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaDatos">
+                        <tr class="skeleton-row"><td><div class="skeleton skeleton-text"></div></td><td><div class="skeleton skeleton-text short"></div></td><td><div class="skeleton skeleton-text short"></div></td></tr>
+                        <tr class="skeleton-row"><td><div class="skeleton skeleton-text"></div></td><td><div class="skeleton skeleton-text short"></div></td><td><div class="skeleton skeleton-text short"></div></td></tr>
+                        <tr class="skeleton-row"><td><div class="skeleton skeleton-text"></div></td><td><div class="skeleton skeleton-text short"></div></td><td><div class="skeleton skeleton-text short"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="toast" id="toastError" role="alert">
+        <i data-lucide="wifi-off" style="width:18px;height:18px;flex-shrink:0;"></i>
+        <span id="toastMessage">Error de conexión</span>
+    </div>
+
+    <script>
+        // ================= CONFIGURACIÓN =================
+        const API_URL = 'https://www.fpenate.somee.com/api/sensorreadings';
+        const MAX_REGISTROS = 10;
+        const INTERVALO_MS = 5000;
+
+        // ================= ELEMENTOS DEL DOM =================
+        const signalDot = document.getElementById('signalDot');
+        const statusText = document.getElementById('statusText');
+        const statusContainer = document.getElementById('statusContainer');
+        const tablaDatos = document.getElementById('tablaDatos');
+        const tableBadge = document.getElementById('tableBadge');
+        const tempValue = document.getElementById('tempValue');
+        const humidValue = document.getElementById('humidValue');
+        const timeValue = document.getElementById('timeValue');
+        const toastError = document.getElementById('toastError');
+        const toastMessage = document.getElementById('toastMessage');
+
+        // ================= GRÁFICA CHART.JS =================
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Temperatura (°C)',
+                        data: [],
+                        borderColor: '#ff6d00',
+                        backgroundColor: 'rgba(255, 109, 0, 0.08)',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#ff6d00',
+                        pointBorderColor: '#1a2332',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 7,
+                        pointHoverBackgroundColor: '#ff8f00',
+                        pointHoverBorderColor: '#fff',
+                        fill: true,
+                        tension: 0.35,
+                        yAxisID: 'yTemp'
+                    },
+                    {
+                        label: 'Humedad (%)',
+                        data: [],
+                        borderColor: '#00bcd4',
+                        backgroundColor: 'rgba(0, 188, 212, 0.06)',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#00bcd4',
+                        pointBorderColor: '#1a2332',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 7,
+                        pointHoverBackgroundColor: '#26c6da',
+                        pointHoverBorderColor: '#fff',
+                        fill: true,
+                        tension: 0.35,
+                        yAxisID: 'yHumid'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1a2332',
+                        borderColor: '#243044',
+                        borderWidth: 1,
+                        titleColor: '#e8edf3',
+                        bodyColor: '#7a8ba3',
+                        titleFont: {
+                            family: "'Space Grotesk', sans-serif",
+                            size: 12,
+                            weight: 600
+                        },
+                        bodyFont: {
+                            family: "'JetBrains Mono', monospace",
+                            size: 12
+                        },
+                        padding: 12,
+                        cornerRadius: 10,
+                        displayColors: true,
+                        boxPadding: 4,
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y.toFixed(2);
+                                return ` ${label}: ${value}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            displayFormats: { minute: 'HH:mm:ss' },
+                            tooltipFormat: 'dd/MM/yyyy HH:mm:ss'
+                        },
+                        grid: {
+                            color: 'rgba(255,255,255,0.04)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#7a8ba3',
+                            font: {
+                                family: "'JetBrains Mono', monospace",
+                                size: 11
+                            },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 8
+                        },
+                        border: { display: false }
+                    },
+                    yTemp: {
+                        type: 'linear',
+                        position: 'left',
+                        // Rangos se calculan dinámicamente en actualizarGrafica()
+                        grid: {
+                            color: 'rgba(255,255,255,0.04)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#ff6d00',
+                            font: {
+                                family: "'JetBrains Mono', monospace",
+                                size: 11
+                            },
+                            callback: function(value) {
+                                return value.toFixed(2) + '°';
+                            }
+                        },
+                        border: { display: false }
+                    },
+                    yHumid: {
+                        type: 'linear',
+                        position: 'right',
+                        // Rangos se calculan dinámicamente en actualizarGrafica()
+                        grid: { drawOnChartArea: false },
+                        ticks: {
+                            color: '#00bcd4',
+                            font: {
+                                family: "'JetBrains Mono', monospace",
+                                size: 11
+                            },
+                            callback: function(value) {
+                                return value.toFixed(2) + '%';
+                            }
+                        },
+                        border: { display: false }
+                    }
+                },
+                animation: {
+                    duration: 600,
+                    easing: 'easeOutQuart'
+                }
+            }
+        });
+
+        // ================= UTILIDADES =================
+
+        function formatearFecha(fechaString) {
+            const fecha = new Date(fechaString);
+            return fecha.toLocaleString('es-ES', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function formatearHora(fechaString) {
+            const fecha = new Date(fechaString);
+            return fecha.toLocaleString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        let toastTimeout = null;
+        function mostrarError(mensaje) {
+            toastMessage.textContent = mensaje;
+            toastError.classList.add('visible');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastError.classList.remove('visible');
+            }, 4000);
+        }
+
+        function ocultarError() {
+            toastError.classList.remove('visible');
+            if (toastTimeout) clearTimeout(toastTimeout);
+        }
+
+        /**
+         * Calcula min, max y stepSize para un eje Y basándose en los datos reales.
+         * Agrega un padding proporcional para que los puntos no queden pegados a los bordes.
+         * Redondea los límites a 1 decimal para que las grillas queden limpias.
+         */
+        function calcularRangoEje(valores) {
+            const min = Math.min(...valores);
+            const max = Math.max(...valores);
+            const rango = max - min;
+            // Padding: al menos 0.3 unidades, o 30% del rango si es mayor
+            const padding = Math.max(rango * 0.3, 0.3);
+            // Redondear límites a 1 decimal hacia abajo/arriba para grilla limpia
+            const rangoMin = parseFloat((min - padding).toFixed(1));
+            const rangoMax = parseFloat((max + padding).toFixed(1));
+            const totalRange = rangoMax - rangoMin;
+            // Step para obtener aproximadamente 5-6 divisiones
+            let step = parseFloat((totalRange / 5).toFixed(1));
+            if (step < 0.1) step = 0.1;
+            return { min: rangoMin, max: rangoMax, step: step };
+        }
+
+        // ================= ACTUALIZAR TARJETAS DE RESUMEN =================
+        function actualizarResumen(ultimaLectura) {
+            if (!ultimaLectura) return;
+            const temp = ultimaLectura.temperature.toFixed(2);
+            const humid = ultimaLectura.humidity.toFixed(2);
+            const hora = formatearHora(ultimaLectura.fechaHora);
+            tempValue.innerHTML = `${temp}<span class="summary-unit">°C</span>`;
+            humidValue.innerHTML = `${humid}<span class="summary-unit">%</span>`;
+            timeValue.textContent = hora;
+        }
+
+        // ================= ACTUALIZAR GRÁFICA =================
+        function actualizarGrafica(lecturas) {
+            // Ordenar de más antiguo a más reciente para que la línea fluya izquierda→derecha
+            const ordenadas = [...lecturas].sort((a, b) =>
+                new Date(a.fechaHora) - new Date(b.fechaHora)
+            );
+
+            const labels = ordenadas.map(l => new Date(l.fechaHora));
+            // 2 decimales exactos para evitar valores como 32.600004
+            const temps = ordenadas.map(l => parseFloat(l.temperature.toFixed(2)));
+            const humids = ordenadas.map(l => parseFloat(l.humidity.toFixed(2)));
+
+            // Calcular rangos dinámicos según los datos reales
+            const rangoTemp = calcularRangoEje(temps);
+            const rangoHumid = calcularRangoEje(humids);
+
+            sensorChart.data.labels = labels;
+            sensorChart.data.datasets[0].data = temps;
+            sensorChart.data.datasets[1].data = humids;
+
+            // Aplicar rangos calculados a cada eje Y
+            sensorChart.options.scales.yTemp.min = rangoTemp.min;
+            sensorChart.options.scales.yTemp.max = rangoTemp.max;
+            sensorChart.options.scales.yTemp.ticks.stepSize = rangoTemp.step;
+
+            sensorChart.options.scales.yHumid.min = rangoHumid.min;
+            sensorChart.options.scales.yHumid.max = rangoHumid.max;
+            sensorChart.options.scales.yHumid.ticks.stepSize = rangoHumid.step;
+
+            sensorChart.update('default');
+        }
+
+        // ================= ACTUALIZAR TABLA =================
+        function actualizarTabla(lecturas) {
+            const ultimas = lecturas.slice(0, MAX_REGISTROS);
+            tablaDatos.innerHTML = '';
+            tableBadge.textContent = `${ultimas.length} registros`;
+
+            ultimas.forEach((lectura, index) => {
+                const fila = document.createElement('tr');
+                const esPrimera = index === 0;
+                const badgeHTML = esPrimera ? '<span class="latest-badge">Ahora</span>' : '';
+                fila.innerHTML = `
+                    <td class="td-time">${formatearFecha(lectura.fechaHora)}${badgeHTML}</td>
+                    <td class="td-temp">${lectura.temperature.toFixed(2)} °C</td>
+                    <td class="td-humid">${lectura.humidity.toFixed(2)} %</td>
+                `;
+                tablaDatos.appendChild(fila);
+            });
+        }
+
+        // ================= ACTUALIZAR ESTADO DE CONEXIÓN =================
+        function actualizarEstado(estado) {
+            const clase = estado.toLowerCase();
+            signalDot.className = `signal-dot ${clase}`;
+            statusText.className = `status-text ${clase}`;
+            statusContainer.className = `status-signal ${clase}`;
+            if (clase === 'online') {
+                statusText.textContent = 'Online';
+            } else if (clase === 'offline') {
+                statusText.textContent = 'Offline';
+            } else {
+                statusText.textContent = estado;
+            }
+        }
+
+        // ================= FUNCIÓN PRINCIPAL =================
+        async function obtenerDatos() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error(`Servidor respondió con ${response.status}`);
+                }
+                const data = await response.json();
+                ocultarError();
+                actualizarEstado(data.estado);
+                actualizarResumen(data.ultimaLectura);
+                actualizarGrafica(data.lecturasRecientes);
+                actualizarTabla(data.lecturasRecientes);
+            } catch (error) {
+                console.error('Error al obtener datos:', error);
+                signalDot.className = 'signal-dot error';
+                statusText.className = 'status-text error';
+                statusContainer.className = 'status-signal error';
+                statusText.textContent = 'Sin conexión';
+                mostrarError(`No se pudo conectar: ${error.message}`);
+            }
+        }
+
+        // ================= INICIALIZAR =================
+        lucide.createIcons();
+        obtenerDatos();
+        setInterval(obtenerDatos, INTERVALO_MS);
+    </script>
+</body>
+</html>
